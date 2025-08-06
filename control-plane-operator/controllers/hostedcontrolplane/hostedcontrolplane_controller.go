@@ -852,7 +852,7 @@ func (r *HostedControlPlaneReconciler) healthCheckKASLoadBalancers(ctx context.C
 		if err := r.Get(ctx, client.ObjectKeyFromObject(externalRoute), externalRoute); err != nil {
 			return fmt.Errorf("failed to get kube apiserver external route: %w", err)
 		}
-		if len(externalRoute.Status.Ingress) == 0 || externalRoute.Status.Ingress[0].RouterCanonicalHostname == "" {
+		if (len(externalRoute.Status.Ingress) == 0 || externalRoute.Status.Ingress[0].RouterCanonicalHostname == "") && hcp.Spec.Platform.Type != hyperv1.IBMCloudPlatform {
 			return fmt.Errorf("APIServer external route not admitted")
 		}
 
