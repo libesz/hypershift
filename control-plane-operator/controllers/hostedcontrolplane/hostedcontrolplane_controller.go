@@ -848,21 +848,23 @@ func (r *HostedControlPlaneReconciler) healthCheckKASLoadBalancers(ctx context.C
 		}
 		return healthCheckKASEndpoint(manifests.KubeAPIServerService("").Name, config.KASSVCPort)
 	case serviceStrategy.Type == hyperv1.Route:
-		externalRoute := manifests.KubeAPIServerExternalPublicRoute(hcp.Namespace)
-		if err := r.Get(ctx, client.ObjectKeyFromObject(externalRoute), externalRoute); err != nil {
-			return fmt.Errorf("failed to get kube apiserver external route: %w", err)
-		}
-		if len(externalRoute.Status.Ingress) == 0 || externalRoute.Status.Ingress[0].RouterCanonicalHostname == "" {
-			return fmt.Errorf("APIServer external route not admitted")
-		}
+		if hcp.Spec.Platform.Type != hyperv1.IBMCloudPlatform {
+			externalRoute := manifests.KubeAPIServerExternalPublicRoute(hcp.Namespace)
+			if err := r.Get(ctx, client.ObjectKeyFromObject(externalRoute), externalRoute); err != nil {
+				return fmt.Errorf("failed to get kube apiserver external route: %w", err)
+			}
+			if len(externalRoute.Status.Ingress) == 0 || externalRoute.Status.Ingress[0].RouterCanonicalHostname == "" {
+				return fmt.Errorf("APIServer external route not admitted")
+			}
 
-		endpoint := externalRoute.Status.Ingress[0].RouterCanonicalHostname
-		port := 443
-		if sharedingress.UseSharedIngress() {
-			endpoint = externalRoute.Spec.Host
-			port = sharedingress.ExternalDNSLBPort
+			endpoint := externalRoute.Status.Ingress[0].RouterCanonicalHostname
+			port := 443
+			if sharedingress.UseSharedIngress() {
+				endpoint = externalRoute.Spec.Host
+				port = sharedingress.ExternalDNSLBPort
+			}
+			return healthCheckKASEndpoint(endpoint, port)
 		}
-		return healthCheckKASEndpoint(endpoint, port)
 
 	case serviceStrategy.Type == hyperv1.LoadBalancer:
 		svc := manifests.KubeAPIServerService(hcp.Namespace)
@@ -4580,6 +4582,10 @@ func (r *HostedControlPlaneReconciler) reconcileRouter(ctx context.Context, hcp 
 }
 
 func (r *HostedControlPlaneReconciler) admitHCPManagedRoutes(ctx context.Context, hcp *hyperv1.HostedControlPlane, privateRouterHost, externalRouterHost string) error {
+	if hcp.Spec.Platform.Type == hyperv1.IBMCloudPlatform && externalRouterHost == "" {
+		externalRouterHost = "not.used"
+	}
+
 	routeList := &routev1.RouteList{}
 	if err := r.List(ctx, routeList, client.InNamespace(hcp.Namespace)); err != nil {
 		return fmt.Errorf("failed to list routes: %w", err)
